@@ -55,20 +55,23 @@ class HTTPSProxyConnection(HTTPConnection):
 
             data = b''
             code = 0
+            pos = -1
             while True:
-                s = proxy_conn.recv(1)
+                s = proxy_conn.recv(4096)
                 if not s:
+                    if code == 0:
+                        raise SocketError("Tunnel connection failed: %r" % data)
                     break
                 data += s
-                if data.endswith(b'\r\n') and code == 0:
+                if code == 0 and b'\r\n' in data:
                     version, code, message = data.split(b' ', 2)
                     if code != b'200':
                         proxy_conn.close()
-                        raise SocketError("Tunnel connection failed: %s %s" % (code,
-                                                                        message.strip()))
-                if data.endswith(b'\r\n\r\n'):
+                        raise SocketError("Tunnel connection failed: %s %s" % (code, message.strip()))
+                pos = data.find(b'\r\n\r\n')
+                if pos > 0:
                     break
-
+            proxy_conn.unread(data[pos+4:])
             conn = proxy_conn
         except SocketTimeout as e:
             raise ConnectTimeoutError(
