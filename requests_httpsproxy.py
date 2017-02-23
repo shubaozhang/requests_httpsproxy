@@ -53,20 +53,20 @@ class HTTPSProxyConnection(HTTPConnection):
             proxy_conn.handshakeClientCert(serverName=proxy_host)
             proxy_conn.sendall(('CONNECT %s:%d HTTP/1.1\r\nHost: %s:%d\r\n\r\n' % (self.host, self.port, self.host, self.port)).encode())
 
-            data = ''
+            data = b''
             code = 0
             while True:
                 s = proxy_conn.recv(1)
                 if not s:
                     break
                 data += s
-                if data.endswith('\r\n') and code == 0:
-                    version, code, message = data.split(' ', 2)
-                    if code != '200':
+                if data.endswith(b'\r\n') and code == 0:
+                    version, code, message = data.split(b' ', 2)
+                    if code != b'200':
                         proxy_conn.close()
                         raise SocketError("Tunnel connection failed: %s %s" % (code,
                                                                         message.strip()))
-                if data.endswith('\r\n\r\n'):
+                if data.endswith(b'\r\n\r\n'):
                     break
 
             conn = proxy_conn
@@ -145,14 +145,14 @@ def tlslite_getpeercert(conn):
                  'DC': 'domainComponent',
                  'UID': 'userid',}
         cert = {}
-        cert['subject'] = [[(abbvs.get(k, k), v) for k, v in subject.get_components()]]
+        cert['subject'] = [[(abbvs.get(k.decode()) or k.decode(), v.decode()) for k, v in subject.get_components()]]
         for i in range(x509.get_extension_count()):
             extension = x509.get_extension(8)
-            if extension.get_short_name() == 'subjectAltName':
+            if extension.get_short_name() == b'subjectAltName':
                 cert['subjectAltName'] = []
-                for c, name in re.findall('\x82(.)([^\x82]+)', extension.get_data()):
+                for c, name in re.findall(br'\x82(.)([a-z0-9\\.\\-_]+)', extension.get_data()):
                     if ord(c) == len(name):
-                        cert['subjectAltName'].append(('DNS', name))
+                        cert['subjectAltName'].append(('DNS', name.decode()))
         conn._peercert = cert
     return conn._peercert
     
