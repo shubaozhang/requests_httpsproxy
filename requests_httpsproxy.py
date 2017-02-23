@@ -131,28 +131,30 @@ class HTTPSProxyProxyManager(PoolManager):
 
 
 def tlslite_getpeercert(conn):
-    x509_bytes = conn.session.serverCertChain.x509List[0].bytes
-    x509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_ASN1, bytes(x509_bytes))
-    subject = x509.get_subject()
-    abbvs = {'CN': 'commonName',
-            'L': 'localityName',
-            'ST': 'stateOrProvinceName',
-            'O': 'organizationName',
-            'OU': 'organizationalUnitName',
-            'C': 'countryName',
-            'STREET': 'streetAddress',
-            'DC': 'domainComponent',
-            'UID': 'userid',}
-    cert = {}
-    cert['subject'] = [[(abbvs.get(k, k), v) for k, v in subject.get_components()]]
-    for i in range(x509.get_extension_count()):
-        extension = x509.get_extension(8)
-        if extension.get_short_name() == 'subjectAltName':
-            cert['subjectAltName'] = []
-            for c, name in re.findall('\x82(.)([^\x82]+)', extension.get_data()):
-                if ord(c) == len(name):
-                    cert['subjectAltName'].append(('DNS', name))
-    return cert
+    if not hasattr(conn, '_peercert'):
+        x509_bytes = conn.session.serverCertChain.x509List[0].bytes
+        x509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_ASN1, bytes(x509_bytes))
+        subject = x509.get_subject()
+        abbvs = {'CN': 'commonName',
+                 'L': 'localityName',
+                 'ST': 'stateOrProvinceName',
+                 'O': 'organizationName',
+                 'OU': 'organizationalUnitName',
+                 'C': 'countryName',
+                 'STREET': 'streetAddress',
+                 'DC': 'domainComponent',
+                 'UID': 'userid',}
+        cert = {}
+        cert['subject'] = [[(abbvs.get(k, k), v) for k, v in subject.get_components()]]
+        for i in range(x509.get_extension_count()):
+            extension = x509.get_extension(8)
+            if extension.get_short_name() == 'subjectAltName':
+                cert['subjectAltName'] = []
+                for c, name in re.findall('\x82(.)([^\x82]+)', extension.get_data()):
+                    if ord(c) == len(name):
+                        cert['subjectAltName'].append(('DNS', name))
+        conn._peercert = cert
+    return conn._peercert
     
 
 def inject_into_requests():
