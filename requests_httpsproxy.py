@@ -168,19 +168,29 @@ def inject_into_requests():
     def proxy_manager_for(self, proxy, **proxy_kwargs):
         if proxy.lower().startswith('https'):
             username, password = get_auth_from_url(proxy)
-            manager = self.proxy_manager[proxy] = HTTPSProxyProxyManager(
-                proxy,
-                username=username,
-                password=password,
-                num_pools=self._pool_connections,
-                maxsize=self._pool_maxsize,
-                block=self._pool_block,
-                **proxy_kwargs
-            )
-            return manager
+            if proxy not in self.proxy_manager:
+                self.proxy_manager[proxy] = HTTPSProxyProxyManager(
+                    proxy,
+                    username=username,
+                    password=password,
+                    num_pools=self._pool_connections,
+                    maxsize=self._pool_maxsize,
+                    block=self._pool_block,
+                    **proxy_kwargs
+                )
+            return self.proxy_manager[proxy]
         else:
             return __real_proxy_manager_for(self, proxy, **proxy_kwargs)
     requests.adapters.HTTPAdapter.proxy_manager_for = proxy_manager_for
+    __real_is_connection_dropped = requests.packages.urllib3.util.connection.is_connection_dropped
+    def is_connection_dropped(conn):
+        sock = conn.sock
+        while isinstance(sock, tlslite.tlsconnection.TLSConnection):
+            sock = sock.sock.socket
+        fake_conn = type('fake_conn_type', (object, ), {})()
+        fake_conn.sock = sock
+        return __real_is_connection_dropped(fake_conn)
+    requests.packages.urllib3.connectionpool.is_connection_dropped = is_connection_dropped
     def ssl_wrap_socket(sock, **kwargs):
         conn = tlslite.TLSConnection(sock)
         conn.handshakeClientCert()
