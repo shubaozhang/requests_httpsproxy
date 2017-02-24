@@ -184,16 +184,20 @@ def inject_into_requests():
     requests.adapters.HTTPAdapter.proxy_manager_for = proxy_manager_for
     __real_is_connection_dropped = requests.packages.urllib3.util.connection.is_connection_dropped
     def is_connection_dropped(conn):
-        sock = conn.sock
-        while isinstance(sock, tlslite.tlsconnection.TLSConnection):
-            sock = sock.sock.socket
-        fake_conn = type('fake_conn_type', (object, ), {})()
-        fake_conn.sock = sock
-        return __real_is_connection_dropped(fake_conn)
+        if isinstance(conn.sock, tlslite.tlsconnection.TLSConnection):
+            sock = conn.sock
+            while isinstance(sock, tlslite.tlsconnection.TLSConnection):
+                sock = sock.sock.socket
+            conn = type('fake_tlslite_conn_type', (object, ), {})()
+            conn.sock = sock
+        return __real_is_connection_dropped(conn)
     requests.packages.urllib3.connectionpool.is_connection_dropped = is_connection_dropped
+    __real_ssl_wrap_socket = requests.packages.urllib3.util.ssl_.ssl_wrap_socket
     def ssl_wrap_socket(sock, **kwargs):
+        if not isinstance(sock, tlslite.tlsconnection.TLSConnection):
+            return __real_ssl_wrap_socket(sock, **kwargs)
         conn = tlslite.TLSConnection(sock)
-        conn.handshakeClientCert()
+        conn.handshakeClientCert(serverName=kwargs.get('server_hostname'))
         conn.getpeercert = functools.partial(tlslite_getpeercert, conn)
         return conn
     requests.packages.urllib3.util.ssl_.ssl_wrap_socket = ssl_wrap_socket
