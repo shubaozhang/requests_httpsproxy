@@ -202,3 +202,6 @@ def inject_into_requests():
         return conn
     requests.packages.urllib3.util.ssl_.ssl_wrap_socket = ssl_wrap_socket
     requests.packages.urllib3.connection.ssl_wrap_socket = ssl_wrap_socket
+
+
+inject_into_requests()
