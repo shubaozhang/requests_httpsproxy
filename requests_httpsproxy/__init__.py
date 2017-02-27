@@ -18,12 +18,40 @@ from requests.packages.urllib3.connectionpool import (
 from requests.packages.urllib3.exceptions import ConnectTimeoutError, NewConnectionError
 from requests.packages.urllib3.poolmanager import PoolManager
 from requests.packages.urllib3.util.url import parse_url
-from requests.packages.urllib3.contrib.pyopenssl import WrappedSocket
+from requests.packages.urllib3.packages.ssl_match_hostname import match_hostname
 
 import re
 import functools
 import tlslite
 import OpenSSL.crypto
+
+
+def tlslite_getpeercert(conn):
+    if not hasattr(conn, '_peercert'):
+        x509_bytes = conn.session.serverCertChain.x509List[0].bytes
+        x509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_ASN1, bytes(x509_bytes))
+        subject = x509.get_subject()
+        abbvs = {'CN': 'commonName',
+                 'L': 'localityName',
+                 'ST': 'stateOrProvinceName',
+                 'O': 'organizationName',
+                 'OU': 'organizationalUnitName',
+                 'C': 'countryName',
+                 'STREET': 'streetAddress',
+                 'DC': 'domainComponent',
+                 'UID': 'userid',}
+        cert = {}
+        cert['subject'] = [[(abbvs.get(k.decode()) or k.decode(), v.decode()) for k, v in subject.get_components()]]
+        for i in range(x509.get_extension_count()):
+            extension = x509.get_extension(i)
+            if extension.get_short_name() == b'subjectAltName':
+                cert['subjectAltName'] = []
+                for c, name in re.findall(br'\x82(.)([a-z0-9\\.\\-_]+)', extension.get_data()):
+                    if ord(c) == len(name):
+                        cert['subjectAltName'].append(('DNS', name.decode()))
+        conn._peercert = cert
+    return conn._peercert
+
 
 class HTTPSProxyConnection(HTTPConnection):
     """
@@ -51,6 +79,8 @@ class HTTPSProxyConnection(HTTPConnection):
             )
             proxy_conn = tlslite.TLSConnection(proxy_sock)
             proxy_conn.handshakeClientCert(serverName=proxy_host)
+            cert = tlslite_getpeercert(proxy_conn)
+            match_hostname(cert, proxy_host)
             proxy_conn.sendall(('CONNECT %s:%d HTTP/1.1\r\nHost: %s:%d\r\n\r\n' % (self.host, self.port, self.host, self.port)).encode())
 
             data = b''
@@ -132,33 +162,6 @@ class HTTPSProxyProxyManager(PoolManager):
 
         self.pool_classes_by_scheme = HTTPSProxyProxyManager.pool_classes_by_scheme
 
-
-def tlslite_getpeercert(conn):
-    if not hasattr(conn, '_peercert'):
-        x509_bytes = conn.session.serverCertChain.x509List[0].bytes
-        x509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_ASN1, bytes(x509_bytes))
-        subject = x509.get_subject()
-        abbvs = {'CN': 'commonName',
-                 'L': 'localityName',
-                 'ST': 'stateOrProvinceName',
-                 'O': 'organizationName',
-                 'OU': 'organizationalUnitName',
-                 'C': 'countryName',
-                 'STREET': 'streetAddress',
-                 'DC': 'domainComponent',
-                 'UID': 'userid',}
-        cert = {}
-        cert['subject'] = [[(abbvs.get(k.decode()) or k.decode(), v.decode()) for k, v in subject.get_components()]]
-        for i in range(x509.get_extension_count()):
-            extension = x509.get_extension(8)
-            if extension.get_short_name() == b'subjectAltName':
-                cert['subjectAltName'] = []
-                for c, name in re.findall(br'\x82(.)([a-z0-9\\.\\-_]+)', extension.get_data()):
-                    if ord(c) == len(name):
-                        cert['subjectAltName'].append(('DNS', name.decode()))
-        conn._peercert = cert
-    return conn._peercert
-    
 
 def inject_into_requests():
     'Monkey-patch requests with HTTPS-Proxy Support.'
