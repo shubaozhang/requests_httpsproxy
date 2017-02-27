@@ -79,8 +79,12 @@ class HTTPSProxyConnection(HTTPConnection):
             )
             proxy_conn = tlslite.TLSConnection(proxy_sock)
             proxy_conn.handshakeClientCert(serverName=proxy_host)
-            cert = tlslite_getpeercert(proxy_conn)
-            match_hostname(cert, proxy_host)
+            try:
+                cert = tlslite_getpeercert(proxy_conn)
+                match_hostname(cert, proxy_host)
+            except:
+                proxy_conn.close()
+                raise
             proxy_conn.sendall(('CONNECT %s:%d HTTP/1.1\r\nHost: %s:%d\r\n\r\n' % (self.host, self.port, self.host, self.port)).encode())
 
             data = b''
