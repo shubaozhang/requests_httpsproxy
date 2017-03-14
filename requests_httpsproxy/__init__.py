@@ -47,7 +47,7 @@ def tlslite_getpeercert(conn):
             extension = x509.get_extension(i)
             if extension.get_short_name() == b'subjectAltName':
                 cert['subjectAltName'] = []
-                for c, name in re.findall(br'\x82(.)([a-z0-9\\.\\-_]+)', extension.get_data()):
+                for c, name in re.findall(br'\x82(.)([a-z0-9\\.\\-\\*_]+)', extension.get_data()):
                     if ord(c) == len(name):
                         cert['subjectAltName'].append(('DNS', name.decode()))
         conn._peercert = cert
@@ -83,7 +83,11 @@ class HTTPSProxyConnection(HTTPConnection):
             )
             proxy_conn = tlslite.TLSConnection(proxy_sock)
             proxy_conn.handshakeClientCert(serverName=proxy_host)
-            #match_hostname(tlslite_getpeercert(proxy_conn), proxy_host)
+            try:
+                match_hostname(tlslite_getpeercert(proxy_conn), proxy_host)
+            except Exception:
+                proxy_conn.close()
+                raise
             data = 'CONNECT %s:%d HTTP/1.1\r\n' % (self.host, self.port)
             if username and password:
                 data += 'Proxy-Authorization: Basic %s\r\n' % base64.b64encode(username+':'+password)
