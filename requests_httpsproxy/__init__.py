@@ -20,6 +20,7 @@ from requests.packages.urllib3.poolmanager import PoolManager
 from requests.packages.urllib3.util.url import parse_url
 from requests.packages.urllib3.packages.ssl_match_hostname import match_hostname
 
+import base64
 import re
 import functools
 import tlslite
@@ -72,6 +73,9 @@ class HTTPSProxyConnection(HTTPConnection):
         try:
             proxy_host = self._ssl_options['proxy_host']
             proxy_port = self._ssl_options['proxy_port']
+            username = self._ssl_options.get('username', '')
+            password = self._ssl_options.get('password', '')
+            proxy_port = self._ssl_options['proxy_port']
             proxy_sock = create_socket_connection(
                 (proxy_host, proxy_port),
                 timeout=self.timeout,
@@ -79,13 +83,13 @@ class HTTPSProxyConnection(HTTPConnection):
             )
             proxy_conn = tlslite.TLSConnection(proxy_sock)
             proxy_conn.handshakeClientCert(serverName=proxy_host)
-            try:
-                cert = tlslite_getpeercert(proxy_conn)
-                match_hostname(cert, proxy_host)
-            except:
-                proxy_conn.close()
-                raise
-            proxy_conn.sendall(('CONNECT %s:%d HTTP/1.1\r\nHost: %s:%d\r\n\r\n' % (self.host, self.port, self.host, self.port)).encode())
+            #match_hostname(tlslite_getpeercert(proxy_conn), proxy_host)
+            data = 'CONNECT %s:%d HTTP/1.1\r\n' % (self.host, self.port)
+            if username and password:
+                data += 'Proxy-Authorization: Basic %s\r\n' % base64.b64encode(username+':'+password)
+            data += 'Host: %s:%d\r\n' % (self.host, self.port)
+            data += '\r\n'
+            proxy_conn.sendall(data.encode())
 
             data = b''
             code = 0
