@@ -1,7 +1,8 @@
 ==============
 requests-httpsproxy
 ==============
-allow http/https requests through https proxy
+allow http/https requests through `HTTPS Proxy
+<https://www.chromium.org/developers/design-documents/secure-web-proxy>`_.
 
 Requirements
 ------------
@@ -17,7 +18,7 @@ Usage
   import requests
   import requests_httpsproxy
 
-  https_proxy = 'https://localhost:8443'
+  https_proxy = 'https://username:password@phus.lu'
   sess = requests.Session()
   print (sess.get('https://httpbin.org/ip', proxies={'http':https_proxy, 'https':https_proxy}).text)
 
