@@ -47,7 +47,7 @@ def tlslite_getpeercert(conn):
             extension = x509.get_extension(i)
             if extension.get_short_name() == b'subjectAltName':
                 cert['subjectAltName'] = []
-                for c, name in re.findall(br'\x82(.)([a-z0-9\\.\\-\\*_]+)', extension.get_data()):
+                for c, name in re.findall(br'(?s)\x82(.)([a-z0-9\\.\\-\\*_]+)', extension.get_data()):
                     if ord(c) == len(name):
                         cert['subjectAltName'].append(('DNS', name.decode()))
         conn._peercert = cert
